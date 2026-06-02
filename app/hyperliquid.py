@@ -242,7 +242,7 @@ def _normalize_spot(spot_state: Any, prices: dict[str, float]) -> list[dict]:
     return out
 
 
-def _normalize_fills(fills: Any, limit: int = 30) -> list[dict]:
+def _normalize_fills(fills: Any, limit: int = 15) -> list[dict]:
     """Turn a userFills response into a trimmed list of recent trades."""
     out: list[dict] = []
     if not isinstance(fills, list):
