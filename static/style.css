@@ -64,6 +64,60 @@ body {
 
 #lookup-form button:hover { filter: brightness(1.08); }
 
+.save-btn {
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.save-btn:hover { color: var(--accent); border-color: var(--accent); }
+.save-btn.saved { color: #f0b90b; border-color: #f0b90b; }
+
+.watchlist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  max-width: 900px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--panel);
+}
+.chip.active { border-color: var(--accent); }
+
+.chip-main {
+  border: none;
+  background: transparent;
+  color: var(--text);
+  padding: 7px 10px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.chip-main:hover { background: var(--panel-2); }
+.chip.active .chip-main { color: var(--accent); }
+
+.chip-remove {
+  border: none;
+  border-left: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  padding: 0 9px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.chip-remove:hover { background: rgba(246, 70, 93, 0.16); color: var(--red); }
+
 .status {
   margin-top: 10px;
   min-height: 18px;

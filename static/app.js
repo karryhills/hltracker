@@ -3,10 +3,14 @@
 const REFRESH_MS = 5000;
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 
+const WATCHLIST_KEY = "hl_watchlist";
+
 const form = document.getElementById("lookup-form");
 const input = document.getElementById("address-input");
 const statusEl = document.getElementById("status");
 const results = document.getElementById("results");
+const saveBtn = document.getElementById("save-btn");
+const watchlistEl = document.getElementById("watchlist");
 
 let currentAddress = null;
 let refreshTimer = null;
@@ -56,6 +60,77 @@ function el(tag, attrs = {}, children = []) {
     node.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
   }
   return node;
+}
+
+function shortenAddress(addr) {
+  return addr.slice(0, 6) + "…" + addr.slice(-4);
+}
+
+// ---- watchlist (browser localStorage) ----------------------------------
+
+function loadWatchlist() {
+  try {
+    const raw = localStorage.getItem(WATCHLIST_KEY);
+    const list = raw ? JSON.parse(raw) : [];
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveWatchlist(list) {
+  try {
+    localStorage.setItem(WATCHLIST_KEY, JSON.stringify(list));
+  } catch {
+    /* storage unavailable (e.g. private mode) — ignore */
+  }
+}
+
+function isSaved(address) {
+  const addr = address.toLowerCase();
+  return loadWatchlist().some((w) => w.address.toLowerCase() === addr);
+}
+
+function addToWatchlist(address, label) {
+  const list = loadWatchlist();
+  if (list.some((w) => w.address.toLowerCase() === address.toLowerCase())) return;
+  list.push({ address, label: (label || "").trim() });
+  saveWatchlist(list);
+}
+
+function removeFromWatchlist(address) {
+  const addr = address.toLowerCase();
+  saveWatchlist(loadWatchlist().filter((w) => w.address.toLowerCase() !== addr));
+}
+
+function renderWatchlist() {
+  const list = loadWatchlist();
+  watchlistEl.innerHTML = "";
+  watchlistEl.classList.toggle("hidden", list.length === 0);
+
+  for (const item of list) {
+    const isActive = currentAddress && item.address.toLowerCase() === currentAddress.toLowerCase();
+    const labelText = item.label || shortenAddress(item.address);
+
+    const mainBtn = el("button", { class: "chip-main", type: "button", title: item.address }, labelText);
+    mainBtn.addEventListener("click", () => track(item.address));
+
+    const removeBtn = el("button", { class: "chip-remove", type: "button", title: "Remove", "aria-label": "Remove" }, "×");
+    removeBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      removeFromWatchlist(item.address);
+      renderWatchlist();
+      updateSaveButton();
+    });
+
+    watchlistEl.appendChild(el("div", { class: "chip" + (isActive ? " active" : "") }, [mainBtn, removeBtn]));
+  }
+}
+
+function updateSaveButton() {
+  const saved = currentAddress && isSaved(currentAddress);
+  saveBtn.classList.toggle("saved", !!saved);
+  saveBtn.title = saved ? "Remove from watchlist" : "Save to watchlist";
 }
 
 // ---- rendering ----------------------------------------------------------
@@ -205,6 +280,8 @@ async function track(address) {
     results.classList.add("hidden");
     stopAutoRefresh();
     currentAddress = null;
+    updateSaveButton();
+    renderWatchlist();
     return;
   }
   currentAddress = address;
@@ -212,6 +289,8 @@ async function track(address) {
   if (window.location.hash.slice(1) !== address) {
     window.location.hash = address;
   }
+  updateSaveButton();
+  renderWatchlist();
   await fetchWallet(address);
   startAutoRefresh();
 }
@@ -230,6 +309,28 @@ window.addEventListener("hashchange", () => {
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden && currentAddress) fetchWallet(currentAddress, { silent: true });
 });
+
+// Save / unsave the current (or typed) address to the watchlist.
+saveBtn.addEventListener("click", () => {
+  const addr = (currentAddress || input.value).trim();
+  if (!ADDRESS_RE.test(addr)) {
+    setStatus("Enter a valid address before saving.", true);
+    return;
+  }
+  if (isSaved(addr)) {
+    removeFromWatchlist(addr);
+  } else {
+    const label = window.prompt("Nickname for this wallet (optional):", "");
+    if (label === null) return; // user cancelled
+    addToWatchlist(addr, label);
+  }
+  renderWatchlist();
+  updateSaveButton();
+});
+
+// Render the saved watchlist on first paint.
+renderWatchlist();
+updateSaveButton();
 
 // Load address from URL hash on first paint (shareable links).
 const initial = window.location.hash.slice(1);

@@ -16,6 +16,8 @@ all data comes from the public [Hyperliquid Info API](https://hyperliquid.gitboo
 - **Spot balances** — token amounts and USD value.
 - **Recent trades** — latest fills with closed PnL and fees.
 - **Auto-refresh** — polls every 5s while the tab is open (pauses when hidden).
+- **Saved watchlist** — star a wallet (with an optional nickname) to save it in your
+  browser; saved wallets show as clickable chips for quick switching.
 - **Shareable links** — the address lives in the URL hash (`/#0x...`).
 
 ## Run locally
