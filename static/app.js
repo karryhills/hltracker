@@ -174,6 +174,15 @@ function coinCell(coin, dex) {
   return el("td", { "data-label": "Coin", class: "coin-cell" }, children);
 }
 
+// Sticky left column for a position: coin + leverage on top, side below.
+function symCell(p) {
+  const top = el("div", { class: "sym-top" }, [el("span", { class: "coin-name" }, p.coin)]);
+  if (p.leverage) top.appendChild(el("span", { class: "lev-tag" }, p.leverage + "x"));
+  if (p.dex) top.appendChild(el("span", { class: "dex-tag", title: "HIP-3 DEX: " + p.dex }, p.dex));
+  const sub = el("div", { class: "sym-side " + p.side }, p.side.toUpperCase());
+  return el("td", { class: "sym-cell", "data-label": "Position" }, [top, sub]);
+}
+
 function renderPositions(positions) {
   const tbody = document.querySelector("#positions-table tbody");
   tbody.innerHTML = "";
@@ -183,16 +192,14 @@ function renderPositions(positions) {
 
   for (const p of positions) {
     const row = el("tr", {}, [
-      coinCell(p.coin, p.dex),
-      cell("Side", el("span", { class: "badge " + p.side }, p.side.toUpperCase())),
-      cell("Size", fmtNum(p.size)),
-      cell("Entry", fmtNum(p.entryPx)),
-      cell("Mark", fmtNum(p.markPx)),
-      cell("Value", fmtUsd(p.positionValue)),
+      symCell(p),
       cell("Unrealized PnL", fmtUsd(p.unrealizedPnl, { sign: true }), pnlClass(p.unrealizedPnl)),
-      cell("ROE", fmtPct(p.returnOnEquity), pnlClass(p.returnOnEquity)),
-      cell("Lev", p.leverage ? p.leverage + "x" : "-"),
       cell("Liq. Px", p.liquidationPx ? fmtNum(p.liquidationPx) : "-"),
+      cell("Price", fmtNum(p.markPx)),
+      cell("Entry", fmtNum(p.entryPx)),
+      cell("Size", fmtNum(p.size)),
+      cell("Value", fmtUsd(p.positionValue)),
+      cell("ROE", fmtPct(p.returnOnEquity), pnlClass(p.returnOnEquity)),
     ]);
     tbody.appendChild(row);
   }
@@ -208,8 +215,8 @@ function renderSpot(spot) {
     tbody.appendChild(
       el("tr", {}, [
         cell("Coin", el("span", { class: "coin-name" }, b.coin), "coin-cell"),
-        cell("Amount", fmtNum(b.total, 6)),
         cell("USD Value", b.usdValue ? fmtUsd(b.usdValue) : "-"),
+        cell("Amount", fmtNum(b.total, 6)),
         cell("Entry Notional", b.entryNtl ? fmtUsd(b.entryNtl) : "-"),
       ])
     );
@@ -224,13 +231,13 @@ function renderFills(fills) {
   for (const f of fills) {
     tbody.appendChild(
       el("tr", {}, [
-        cell("Time", fmtTime(f.time)),
         coinCell(f.coin, f.dex),
         cell("Side", el("span", { class: "badge " + f.side }, f.side.toUpperCase())),
         cell("Price", fmtNum(f.px)),
         cell("Size", fmtNum(f.sz)),
         cell("Closed PnL", f.closedPnl ? fmtUsd(f.closedPnl, { sign: true }) : "-", pnlClass(f.closedPnl)),
         cell("Fee", fmtUsd(f.fee)),
+        cell("Time", fmtTime(f.time)),
         cell("Direction", f.dir || "-"),
       ])
     );

@@ -240,6 +240,40 @@ tbody tr { border-bottom: 1px solid var(--border-soft); }
 tbody tr:last-child { border-bottom: none; }
 tbody tr:hover { background: var(--panel-2); }
 
+/* Pin the first column (symbol/coin) while the rest scrolls horizontally. */
+th:first-child, td:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--panel);
+  z-index: 1;
+}
+thead th:first-child { z-index: 3; }
+tbody tr:hover td:first-child { background: var(--panel-2); }
+/* Divider so the pinned column stays visually separate while scrolling. */
+th:first-child::after, td:first-child::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--border);
+}
+
+/* Position symbol cell: coin + leverage on top, side below. */
+.sym-cell { vertical-align: middle; }
+.sym-top { display: flex; align-items: baseline; gap: 5px; }
+.sym-top .coin-name { font-size: 14px; }
+.lev-tag { color: var(--muted); font-size: 11px; font-weight: 600; }
+.sym-side {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  margin-top: 2px;
+}
+.sym-side.long { color: var(--green); }
+.sym-side.short { color: var(--red); }
+
 .coin-name { font-weight: 600; }
 .dex-tag {
   margin-left: 6px;
@@ -278,7 +312,7 @@ tbody tr:hover { background: var(--panel-2); }
   border-top: 1px solid var(--border);
 }
 
-/* ---- iPhone / narrow screens: tables become stacked cards ------------ */
+/* ---- iPhone / narrow screens: keep tables, tighten spacing ----------- */
 
 @media (max-width: 640px) {
   .topbar h1 { font-size: 18px; }
@@ -287,57 +321,9 @@ tbody tr:hover { background: var(--panel-2); }
   .panel { padding: 12px; border-radius: 12px; }
   .panel h2 { font-size: 14px; margin-bottom: 10px; }
 
-  thead { display: none; }
-  table, tbody { display: block; }
-
-  /* Each row becomes a compact card; fields flow in a 2-column grid so a
-     position/trade takes a few rows instead of one row per field. */
-  tbody tr {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px 12px;
-    background: var(--panel-2);
-    border: 1px solid var(--border);
-    border-radius: 11px;
-    margin-bottom: 8px;
-    padding: 11px 13px;
-  }
-  tbody tr:hover { background: var(--panel-2); }
-
-  td {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    text-align: left;
-    padding: 0;
-    border: none;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  td::before {
-    content: attr(data-label);
-    color: var(--muted);
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-  }
-
-  /* Coin spans the full width as a compact card header */
-  td.coin-cell {
-    grid-column: 1 / -1;
-    flex-direction: row;
-    align-items: center;
-    gap: 8px;
-    padding-bottom: 8px;
-    margin-bottom: 1px;
-    border-bottom: 1px solid var(--border);
-  }
-  td.coin-cell::before { content: none; }
-  td.coin-cell .coin-name { font-size: 15px; }
+  table { font-size: 13px; }
+  th, td { padding: 10px 12px; }
 
   .summary-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
-  .summary-card { padding: 10px 12px; }
   .summary-card .value { font-size: 16px; }
 }
