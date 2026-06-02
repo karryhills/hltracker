@@ -194,9 +194,9 @@ function renderPositions(positions) {
     const row = el("tr", {}, [
       symCell(p),
       cell("ROE", fmtPct(p.returnOnEquity), pnlClass(p.returnOnEquity)),
+      cell("24h", p.change24h == null ? "-" : fmtPct(p.change24h), pnlClass(p.change24h)),
       cell("Unrealized PnL", fmtUsd(p.unrealizedPnl, { sign: true }), pnlClass(p.unrealizedPnl)),
       cell("Margin", fmtUsd(p.marginUsed)),
-      cell("24h", p.change24h == null ? "-" : fmtPct(p.change24h), pnlClass(p.change24h)),
       cell("Price", fmtNum(p.markPx)),
       cell("Liq. Px", p.liquidationPx ? fmtNum(p.liquidationPx) : "-"),
       cell("Entry", fmtNum(p.entryPx)),
