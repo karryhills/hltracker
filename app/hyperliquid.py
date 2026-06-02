@@ -50,6 +50,27 @@ async def _post(body: dict) -> Any:
     return resp.json()
 
 
+async def _try_post(body: dict) -> Any:
+    """Like _post, but return None on any HTTP error (for non-critical calls)."""
+    try:
+        return await _post(body)
+    except httpx.HTTPError:
+        return None
+
+
+def _split_coin(coin: Any) -> tuple[str, str]:
+    """Split a coin symbol into (dex, coin).
+
+    HIP-3 perp assets are namespaced as "<dex>:<COIN>" (e.g. "xyz:SP500"). Native
+    assets have no prefix. Returns ("", coin) for native.
+    """
+    text = str(coin if coin is not None else "?")
+    if ":" in text:
+        dex, name = text.split(":", 1)
+        return dex, name
+    return "", text
+
+
 def _f(value: Any, default: float = 0.0) -> float:
     """Best-effort float cast for the API's numeric-string fields."""
     try:
@@ -123,10 +144,14 @@ def _normalize_perps(raw: Any) -> tuple[dict, list[dict]]:
             unrealized = _f(pos.get("unrealizedPnl"))
             summary["totalUnrealizedPnl"] += unrealized
             leverage = pos.get("leverage") or {}
+            # Prefer an explicit "dex:" prefix on the coin; otherwise use the DEX
+            # this state came from.
+            coin_dex, coin = _split_coin(pos.get("coin"))
+            pos_dex = coin_dex or ("" if is_native else dex_name)
             positions.append(
                 {
-                    "coin": pos.get("coin", "?"),
-                    "dex": "" if is_native else dex_name,
+                    "coin": coin,
+                    "dex": "" if pos_dex in ("", "native") else pos_dex,
                     "side": "long" if szi > 0 else "short",
                     "size": size_abs,
                     "entryPx": _f(pos.get("entryPx")),
@@ -207,9 +232,11 @@ def _normalize_fills(fills: Any, limit: int = 30) -> list[dict]:
     # API returns most-recent-first already, but sort defensively by time desc.
     fills_sorted = sorted(fills, key=lambda f: f.get("time", 0), reverse=True)
     for fill in fills_sorted[:limit]:
+        dex, coin = _split_coin(fill.get("coin"))
         out.append(
             {
-                "coin": fill.get("coin", "?"),
+                "coin": coin,
+                "dex": dex,
                 "side": "buy" if fill.get("side") == "B" else "sell",
                 "px": _f(fill.get("px")),
                 "sz": _f(fill.get("sz")),
@@ -222,37 +249,67 @@ def _normalize_fills(fills: Any, limit: int = 30) -> list[dict]:
     return out
 
 
-async def _fetch_perps(address: str) -> Any:
-    """Fetch perps state across all DEXes, falling back to the native DEX only.
+def _perp_dex_names(perp_dexs_raw: Any) -> list[str]:
+    """Extract HIP-3 perp DEX short names from a perpDexs response.
 
-    `ALL_DEXES` includes HIP-3 builder-deployed perps (e.g. equity perps like SPY,
-    PLTR). If that form isn't accepted, fall back to the default single-DEX request.
+    perpDexs returns a list whose first entry is null (the native DEX) and whose
+    remaining entries are objects with a "name" field.
     """
-    try:
-        return await _post(
-            {"type": "clearinghouseState", "user": address, "dex": "ALL_DEXES"}
-        )
-    except httpx.HTTPStatusError:
-        return await _post({"type": "clearinghouseState", "user": address})
+    names: list[str] = []
+    if isinstance(perp_dexs_raw, list):
+        for dex in perp_dexs_raw:
+            if isinstance(dex, dict) and dex.get("name"):
+                names.append(dex["name"])
+    return names
+
+
+async def _fetch_perp_states(address: str, dex_names: list[str]) -> dict[str, Any]:
+    """Fetch clearinghouseState for each DEX concurrently.
+
+    `dex_names` is a list where "" means the native DEX. Returns a dict keyed by
+    DEX name (native under "native") containing only the states that responded, so
+    one failing DEX doesn't sink the rest.
+    """
+    async def one(name: str) -> tuple[str, Any]:
+        body = {"type": "clearinghouseState", "user": address}
+        if name:
+            body["dex"] = name
+        return name, await _try_post(body)
+
+    pairs = await asyncio.gather(*[one(n) for n in dex_names])
+    return {
+        ("native" if name == "" else name): state
+        for name, state in pairs
+        if state is not None
+    }
 
 
 async def get_wallet(address: str) -> dict:
     """Fetch and normalize a wallet's full Hyperliquid state.
 
-    Runs the Info calls concurrently. Each section is guarded so that a partial
-    upstream failure still returns the data that did load.
+    Positions are gathered across every perp DEX the wallet might use — the native
+    DEX plus all HIP-3 builder-deployed DEXes (e.g. equity perps like SP500, PLTR) —
+    by enumerating DEXes from `perpDexs` and from the DEX prefixes seen in the
+    wallet's fills, then querying each DEX's clearinghouseState directly.
     """
-    perps_raw, spot_raw, spot_meta_raw, fills_raw = await asyncio.gather(
-        _fetch_perps(address),
+    perp_dexs_raw, spot_raw, spot_meta_raw, fills_raw = await asyncio.gather(
+        _try_post({"type": "perpDexs"}),
         _post({"type": "spotClearinghouseState", "user": address}),
         _post({"type": "spotMetaAndAssetCtxs"}),
         _post({"type": "userFills", "user": address}),
     )
 
-    summary, positions = _normalize_perps(perps_raw)
+    fills = _normalize_fills(fills_raw)
+
+    # Native DEX ("") + every HIP-3 DEX from perpDexs + any DEX seen in the fills.
+    dex_names = {""}
+    dex_names.update(_perp_dex_names(perp_dexs_raw))
+    dex_names.update(f["dex"] for f in fills if f.get("dex"))
+
+    states = await _fetch_perp_states(address, sorted(dex_names))
+    summary, positions = _normalize_perps(states)
     prices = _spot_price_map(spot_meta_raw)
     spot = _normalize_spot(spot_raw, prices)
-    fills = _normalize_fills(fills_raw)
 
     return {
         "address": address,

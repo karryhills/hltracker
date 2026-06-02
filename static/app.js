@@ -225,7 +225,7 @@ function renderFills(fills) {
     tbody.appendChild(
       el("tr", {}, [
         cell("Time", fmtTime(f.time)),
-        cell("Coin", el("span", { class: "coin-name" }, f.coin), "coin-cell"),
+        coinCell(f.coin, f.dex),
         cell("Side", el("span", { class: "badge " + f.side }, f.side.toUpperCase())),
         cell("Price", fmtNum(f.px)),
         cell("Size", fmtNum(f.sz)),

@@ -283,47 +283,61 @@ tbody tr:hover { background: var(--panel-2); }
 @media (max-width: 640px) {
   .topbar h1 { font-size: 18px; }
 
-  thead { display: none; }
-  table, tbody, tr, td { display: block; width: 100%; }
+  .results { gap: 10px; margin-top: 10px; }
+  .panel { padding: 12px; border-radius: 12px; }
+  .panel h2 { font-size: 14px; margin-bottom: 10px; }
 
+  thead { display: none; }
+  table, tbody { display: block; }
+
+  /* Each row becomes a compact card; fields flow in a 2-column grid so a
+     position/trade takes a few rows instead of one row per field. */
   tbody tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 12px;
     background: var(--panel-2);
     border: 1px solid var(--border);
-    border-radius: 12px;
-    margin-bottom: 10px;
-    padding: 4px 14px;
+    border-radius: 11px;
+    margin-bottom: 8px;
+    padding: 11px 13px;
   }
   tbody tr:hover { background: var(--panel-2); }
 
   td {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    text-align: right;
-    padding: 9px 0;
-    white-space: normal;
-    border-bottom: 1px solid var(--border-soft);
+    flex-direction: column;
+    gap: 1px;
+    text-align: left;
+    padding: 0;
+    border: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
-  td:last-child { border-bottom: none; }
 
   td::before {
     content: attr(data-label);
     color: var(--muted);
-    font-size: 11.5px;
+    font-size: 10px;
     text-transform: uppercase;
-    letter-spacing: 0.4px;
-    text-align: left;
-    margin-right: 14px;
+    letter-spacing: 0.3px;
   }
 
-  /* Coin acts as the card header */
+  /* Coin spans the full width as a compact card header */
   td.coin-cell {
-    justify-content: flex-start;
+    grid-column: 1 / -1;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding-bottom: 8px;
+    margin-bottom: 1px;
     border-bottom: 1px solid var(--border);
-    padding: 12px 0 10px;
   }
   td.coin-cell::before { content: none; }
-  td.coin-cell .coin-name { font-size: 16px; }
+  td.coin-cell .coin-name { font-size: 15px; }
 
-  .summary-grid { grid-template-columns: 1fr 1fr; }
+  .summary-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .summary-card { padding: 10px 12px; }
+  .summary-card .value { font-size: 16px; }
 }

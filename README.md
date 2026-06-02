@@ -54,9 +54,10 @@ The backend (`app/main.py`) exposes:
 
 - `GET /` — the single-page UI.
 - `GET /api/wallet/{address}` — validates the address, then concurrently calls four
-  Hyperliquid Info endpoints (`clearinghouseState` with `dex: "ALL_DEXES"` to span all
-  perp DEXes, `spotClearinghouseState`, `spotMetaAndAssetCtxs`, `userFills`), normalizes
-  them, and returns one JSON payload.
+  Hyperliquid Info endpoints. It enumerates perp DEXes (via `perpDexs` and the DEX
+  prefixes in the wallet's fills), queries each DEX's `clearinghouseState`, and combines
+  them with `spotClearinghouseState`, `spotMetaAndAssetCtxs`, and `userFills` into one
+  normalized JSON payload.
   Responses are briefly cached (~3s) to dedupe rapid auto-refresh polls and respect
   Hyperliquid's rate limits.
 - `GET /healthz` — health check.
