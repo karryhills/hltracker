@@ -193,13 +193,14 @@ function renderPositions(positions) {
   for (const p of positions) {
     const row = el("tr", {}, [
       symCell(p),
-      cell("Unrealized PnL", fmtUsd(p.unrealizedPnl, { sign: true }), pnlClass(p.unrealizedPnl)),
-      cell("Liq. Px", p.liquidationPx ? fmtNum(p.liquidationPx) : "-"),
+      cell("ROE", fmtPct(p.returnOnEquity), pnlClass(p.returnOnEquity)),
+      cell("24h", p.change24h == null ? "-" : fmtPct(p.change24h), pnlClass(p.change24h)),
       cell("Price", fmtNum(p.markPx)),
+      cell("Liq. Px", p.liquidationPx ? fmtNum(p.liquidationPx) : "-"),
+      cell("Unrealized PnL", fmtUsd(p.unrealizedPnl, { sign: true }), pnlClass(p.unrealizedPnl)),
       cell("Entry", fmtNum(p.entryPx)),
       cell("Size", fmtNum(p.size)),
       cell("Value", fmtUsd(p.positionValue)),
-      cell("ROE", fmtPct(p.returnOnEquity), pnlClass(p.returnOnEquity)),
     ]);
     tbody.appendChild(row);
   }

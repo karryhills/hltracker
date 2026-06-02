@@ -110,12 +110,16 @@ def _iter_states(raw: Any) -> list[tuple[str, dict]]:
     return []
 
 
-def _normalize_perps(raw: Any) -> tuple[dict, list[dict]]:
+def _normalize_perps(
+    raw: Any, ctx_map: dict[tuple[str, str], dict] | None = None
+) -> tuple[dict, list[dict]]:
     """Turn a clearinghouseState response into (summary, positions).
 
     Aggregates across every perp DEX returned (native + HIP-3), so positions on
-    builder-deployed DEXes show up alongside native ones.
+    builder-deployed DEXes show up alongside native ones. `ctx_map` maps
+    (dex, coin) -> asset context (for the 24h price change).
     """
+    ctx_map = ctx_map or {}
     summary = {
         "accountValue": 0.0,
         "totalNtlPos": 0.0,
@@ -148,14 +152,25 @@ def _normalize_perps(raw: Any) -> tuple[dict, list[dict]]:
             # this state came from.
             coin_dex, coin = _split_coin(pos.get("coin"))
             pos_dex = coin_dex or ("" if is_native else dex_name)
+            norm_dex = "" if pos_dex in ("", "native") else pos_dex
+
+            # 24h price change from the asset context's previous-day price.
+            change_24h = None
+            ctx = ctx_map.get((norm_dex, coin))
+            if ctx:
+                prev = _f(ctx.get("prevDayPx"))
+                if prev:
+                    change_24h = (mark_px - prev) / prev
+
             positions.append(
                 {
                     "coin": coin,
-                    "dex": "" if pos_dex in ("", "native") else pos_dex,
+                    "dex": norm_dex,
                     "side": "long" if szi > 0 else "short",
                     "size": size_abs,
                     "entryPx": _f(pos.get("entryPx")),
                     "markPx": mark_px,
+                    "change24h": change_24h,
                     "positionValue": position_value,
                     "unrealizedPnl": unrealized,
                     "returnOnEquity": _f(pos.get("returnOnEquity")),
@@ -284,6 +299,34 @@ async def _fetch_perp_states(address: str, dex_names: list[str]) -> dict[str, An
     }
 
 
+async def _fetch_perp_ctxs(dex_names: list[str]) -> dict[tuple[str, str], dict]:
+    """Fetch metaAndAssetCtxs per DEX, returning {(dex, coin): assetCtx}.
+
+    Used for the 24h price change (assetCtx.prevDayPx). `dex` is "" for native.
+    One failing DEX is skipped rather than failing the whole lookup.
+    """
+    async def one(name: str) -> tuple[str, Any]:
+        body: dict = {"type": "metaAndAssetCtxs"}
+        if name:
+            body["dex"] = name
+        return name, await _try_post(body)
+
+    pairs = await asyncio.gather(*[one(n) for n in dex_names])
+    out: dict[tuple[str, str], dict] = {}
+    for name, res in pairs:
+        if not (isinstance(res, list) and len(res) == 2):
+            continue
+        meta, ctxs = res
+        universe = (meta or {}).get("universe") or []
+        if not isinstance(ctxs, list):
+            continue
+        for asset, ctx in zip(universe, ctxs):
+            _, coin = _split_coin((asset or {}).get("name"))
+            if coin and isinstance(ctx, dict):
+                out[(name, coin)] = ctx
+    return out
+
+
 async def get_wallet(address: str) -> dict:
     """Fetch and normalize a wallet's full Hyperliquid state.
 
@@ -306,8 +349,12 @@ async def get_wallet(address: str) -> dict:
     dex_names.update(_perp_dex_names(perp_dexs_raw))
     dex_names.update(f["dex"] for f in fills if f.get("dex"))
 
-    states = await _fetch_perp_states(address, sorted(dex_names))
-    summary, positions = _normalize_perps(states)
+    sorted_dexes = sorted(dex_names)
+    states, ctx_map = await asyncio.gather(
+        _fetch_perp_states(address, sorted_dexes),
+        _fetch_perp_ctxs(sorted_dexes),
+    )
+    summary, positions = _normalize_perps(states, ctx_map)
     prices = _spot_price_map(spot_meta_raw)
     spot = _normalize_spot(spot_raw, prices)
 
