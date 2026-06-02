@@ -10,7 +10,10 @@ all data comes from the public [Hyperliquid Info API](https://hyperliquid.gitboo
 ## Features
 
 - **Perps positions & PnL** — coin, long/short, size, entry, mark price, unrealized PnL,
-  ROE, leverage, liquidation price.
+  ROE, leverage, liquidation price. Includes **HIP-3 builder-deployed perps** (e.g.
+  equity perps like SPY, PLTR) by querying across all DEXes, not just the native one.
+- **Mobile-first UI** — a Hyperliquid-style dark theme; on phones the tables collapse
+  into stacked cards (notch-safe), so it reads cleanly on an iPhone in portrait.
 - **Account summary** — account value, unrealized PnL, margin used, total position,
   withdrawable.
 - **Spot balances** — token amounts and USD value.
@@ -51,8 +54,9 @@ The backend (`app/main.py`) exposes:
 
 - `GET /` — the single-page UI.
 - `GET /api/wallet/{address}` — validates the address, then concurrently calls four
-  Hyperliquid Info endpoints (`clearinghouseState`, `spotClearinghouseState`,
-  `spotMetaAndAssetCtxs`, `userFills`), normalizes them, and returns one JSON payload.
+  Hyperliquid Info endpoints (`clearinghouseState` with `dex: "ALL_DEXES"` to span all
+  perp DEXes, `spotClearinghouseState`, `spotMetaAndAssetCtxs`, `userFills`), normalizes
+  them, and returns one JSON payload.
   Responses are briefly cached (~3s) to dedupe rapid auto-refresh polls and respect
   Hyperliquid's rate limits.
 - `GET /healthz` — health check.

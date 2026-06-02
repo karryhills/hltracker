@@ -58,8 +58,43 @@ def _f(value: Any, default: float = 0.0) -> float:
         return default
 
 
-def _normalize_perps(state: Any) -> tuple[dict, list[dict]]:
-    """Turn a clearinghouseState response into (summary, positions)."""
+def _iter_states(raw: Any) -> list[tuple[str, dict]]:
+    """Yield (dex_name, state) pairs from a clearinghouseState response.
+
+    A plain (single-DEX) request returns one state object. A `dex: "ALL_DEXES"`
+    request fans out across the native DEX and every HIP-3 (builder-deployed) perp
+    DEX — the shape there is keyed by DEX name (native DEX under "native"). This
+    handles the single-object, keyed-dict, and list shapes defensively so equity
+    perps (e.g. SPY, PLTR) deployed on HIP-3 DEXes are included.
+    """
+    def looks_like_state(obj: Any) -> bool:
+        return isinstance(obj, dict) and ("assetPositions" in obj or "marginSummary" in obj)
+
+    if isinstance(raw, dict):
+        if looks_like_state(raw):
+            return [("", raw)]
+        out = []
+        for name, value in raw.items():
+            if looks_like_state(value):
+                out.append((name, value))
+        return out
+    if isinstance(raw, list):
+        out = []
+        for item in raw:
+            if looks_like_state(item):
+                out.append(("", item))
+            elif isinstance(item, dict) and looks_like_state(item.get("state")):
+                out.append((item.get("dex", ""), item["state"]))
+        return out
+    return []
+
+
+def _normalize_perps(raw: Any) -> tuple[dict, list[dict]]:
+    """Turn a clearinghouseState response into (summary, positions).
+
+    Aggregates across every perp DEX returned (native + HIP-3), so positions on
+    builder-deployed DEXes show up alongside native ones.
+    """
     summary = {
         "accountValue": 0.0,
         "totalNtlPos": 0.0,
@@ -68,41 +103,42 @@ def _normalize_perps(state: Any) -> tuple[dict, list[dict]]:
         "totalUnrealizedPnl": 0.0,
     }
     positions: list[dict] = []
-    if not isinstance(state, dict):
-        return summary, positions
 
-    margin = state.get("marginSummary") or {}
-    summary["accountValue"] = _f(margin.get("accountValue"))
-    summary["totalNtlPos"] = _f(margin.get("totalNtlPos"))
-    summary["totalMarginUsed"] = _f(margin.get("totalMarginUsed"))
-    summary["withdrawable"] = _f(state.get("withdrawable"))
+    for dex_name, state in _iter_states(raw):
+        is_native = dex_name in ("", "native")
+        margin = state.get("marginSummary") or {}
+        summary["accountValue"] += _f(margin.get("accountValue"))
+        summary["totalNtlPos"] += _f(margin.get("totalNtlPos"))
+        summary["totalMarginUsed"] += _f(margin.get("totalMarginUsed"))
+        summary["withdrawable"] += _f(state.get("withdrawable"))
 
-    for entry in state.get("assetPositions") or []:
-        pos = (entry or {}).get("position") or {}
-        szi = _f(pos.get("szi"))
-        if szi == 0:
-            continue
-        position_value = _f(pos.get("positionValue"))
-        size_abs = abs(szi)
-        mark_px = position_value / size_abs if size_abs else 0.0
-        unrealized = _f(pos.get("unrealizedPnl"))
-        summary["totalUnrealizedPnl"] += unrealized
-        leverage = pos.get("leverage") or {}
-        positions.append(
-            {
-                "coin": pos.get("coin", "?"),
-                "side": "long" if szi > 0 else "short",
-                "size": size_abs,
-                "entryPx": _f(pos.get("entryPx")),
-                "markPx": mark_px,
-                "positionValue": position_value,
-                "unrealizedPnl": unrealized,
-                "returnOnEquity": _f(pos.get("returnOnEquity")),
-                "leverage": _f(leverage.get("value")),
-                "liquidationPx": _f(pos.get("liquidationPx")),
-                "marginUsed": _f(pos.get("marginUsed")),
-            }
-        )
+        for entry in state.get("assetPositions") or []:
+            pos = (entry or {}).get("position") or {}
+            szi = _f(pos.get("szi"))
+            if szi == 0:
+                continue
+            position_value = _f(pos.get("positionValue"))
+            size_abs = abs(szi)
+            mark_px = position_value / size_abs if size_abs else 0.0
+            unrealized = _f(pos.get("unrealizedPnl"))
+            summary["totalUnrealizedPnl"] += unrealized
+            leverage = pos.get("leverage") or {}
+            positions.append(
+                {
+                    "coin": pos.get("coin", "?"),
+                    "dex": "" if is_native else dex_name,
+                    "side": "long" if szi > 0 else "short",
+                    "size": size_abs,
+                    "entryPx": _f(pos.get("entryPx")),
+                    "markPx": mark_px,
+                    "positionValue": position_value,
+                    "unrealizedPnl": unrealized,
+                    "returnOnEquity": _f(pos.get("returnOnEquity")),
+                    "leverage": _f(leverage.get("value")),
+                    "liquidationPx": _f(pos.get("liquidationPx")),
+                    "marginUsed": _f(pos.get("marginUsed")),
+                }
+            )
 
     positions.sort(key=lambda p: abs(p["positionValue"]), reverse=True)
     return summary, positions
@@ -186,14 +222,28 @@ def _normalize_fills(fills: Any, limit: int = 30) -> list[dict]:
     return out
 
 
+async def _fetch_perps(address: str) -> Any:
+    """Fetch perps state across all DEXes, falling back to the native DEX only.
+
+    `ALL_DEXES` includes HIP-3 builder-deployed perps (e.g. equity perps like SPY,
+    PLTR). If that form isn't accepted, fall back to the default single-DEX request.
+    """
+    try:
+        return await _post(
+            {"type": "clearinghouseState", "user": address, "dex": "ALL_DEXES"}
+        )
+    except httpx.HTTPStatusError:
+        return await _post({"type": "clearinghouseState", "user": address})
+
+
 async def get_wallet(address: str) -> dict:
     """Fetch and normalize a wallet's full Hyperliquid state.
 
-    Runs the four Info calls concurrently. Each section is guarded so that a partial
+    Runs the Info calls concurrently. Each section is guarded so that a partial
     upstream failure still returns the data that did load.
     """
     perps_raw, spot_raw, spot_meta_raw, fills_raw = await asyncio.gather(
-        _post({"type": "clearinghouseState", "user": address}),
+        _fetch_perps(address),
         _post({"type": "spotClearinghouseState", "user": address}),
         _post({"type": "spotMetaAndAssetCtxs"}),
         _post({"type": "userFills", "user": address}),

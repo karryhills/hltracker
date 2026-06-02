@@ -162,6 +162,18 @@ function toggleEmpty(tableId, isEmpty) {
   msg.classList.toggle("hidden", !isEmpty);
 }
 
+// Build a <td> carrying a data-label (shown as the field name in the mobile
+// card layout). `content` may be a string or a DOM node.
+function cell(label, content, cls = "") {
+  return el("td", { class: cls, "data-label": label }, [content]);
+}
+
+function coinCell(coin, dex) {
+  const children = [el("span", { class: "coin-name" }, coin)];
+  if (dex) children.push(el("span", { class: "dex-tag", title: "HIP-3 DEX: " + dex }, dex));
+  return el("td", { "data-label": "Coin", class: "coin-cell" }, children);
+}
+
 function renderPositions(positions) {
   const tbody = document.querySelector("#positions-table tbody");
   tbody.innerHTML = "";
@@ -171,16 +183,16 @@ function renderPositions(positions) {
 
   for (const p of positions) {
     const row = el("tr", {}, [
-      el("td", {}, p.coin),
-      el("td", {}, [el("span", { class: "badge " + p.side }, p.side.toUpperCase())]),
-      el("td", {}, fmtNum(p.size)),
-      el("td", {}, fmtNum(p.entryPx)),
-      el("td", {}, fmtNum(p.markPx)),
-      el("td", {}, fmtUsd(p.positionValue)),
-      el("td", { class: pnlClass(p.unrealizedPnl) }, fmtUsd(p.unrealizedPnl, { sign: true })),
-      el("td", { class: pnlClass(p.returnOnEquity) }, fmtPct(p.returnOnEquity)),
-      el("td", {}, p.leverage ? p.leverage + "x" : "-"),
-      el("td", {}, p.liquidationPx ? fmtNum(p.liquidationPx) : "-"),
+      coinCell(p.coin, p.dex),
+      cell("Side", el("span", { class: "badge " + p.side }, p.side.toUpperCase())),
+      cell("Size", fmtNum(p.size)),
+      cell("Entry", fmtNum(p.entryPx)),
+      cell("Mark", fmtNum(p.markPx)),
+      cell("Value", fmtUsd(p.positionValue)),
+      cell("Unrealized PnL", fmtUsd(p.unrealizedPnl, { sign: true }), pnlClass(p.unrealizedPnl)),
+      cell("ROE", fmtPct(p.returnOnEquity), pnlClass(p.returnOnEquity)),
+      cell("Lev", p.leverage ? p.leverage + "x" : "-"),
+      cell("Liq. Px", p.liquidationPx ? fmtNum(p.liquidationPx) : "-"),
     ]);
     tbody.appendChild(row);
   }
@@ -195,10 +207,10 @@ function renderSpot(spot) {
   for (const b of spot) {
     tbody.appendChild(
       el("tr", {}, [
-        el("td", {}, b.coin),
-        el("td", {}, fmtNum(b.total, 6)),
-        el("td", {}, b.usdValue ? fmtUsd(b.usdValue) : "-"),
-        el("td", {}, b.entryNtl ? fmtUsd(b.entryNtl) : "-"),
+        cell("Coin", el("span", { class: "coin-name" }, b.coin), "coin-cell"),
+        cell("Amount", fmtNum(b.total, 6)),
+        cell("USD Value", b.usdValue ? fmtUsd(b.usdValue) : "-"),
+        cell("Entry Notional", b.entryNtl ? fmtUsd(b.entryNtl) : "-"),
       ])
     );
   }
@@ -212,14 +224,14 @@ function renderFills(fills) {
   for (const f of fills) {
     tbody.appendChild(
       el("tr", {}, [
-        el("td", {}, fmtTime(f.time)),
-        el("td", {}, f.coin),
-        el("td", {}, [el("span", { class: "badge " + f.side }, f.side.toUpperCase())]),
-        el("td", {}, fmtNum(f.px)),
-        el("td", {}, fmtNum(f.sz)),
-        el("td", { class: pnlClass(f.closedPnl) }, f.closedPnl ? fmtUsd(f.closedPnl, { sign: true }) : "-"),
-        el("td", {}, fmtUsd(f.fee)),
-        el("td", {}, f.dir || "-"),
+        cell("Time", fmtTime(f.time)),
+        cell("Coin", el("span", { class: "coin-name" }, f.coin), "coin-cell"),
+        cell("Side", el("span", { class: "badge " + f.side }, f.side.toUpperCase())),
+        cell("Price", fmtNum(f.px)),
+        cell("Size", fmtNum(f.sz)),
+        cell("Closed PnL", f.closedPnl ? fmtUsd(f.closedPnl, { sign: true }) : "-", pnlClass(f.closedPnl)),
+        cell("Fee", fmtUsd(f.fee)),
+        cell("Direction", f.dir || "-"),
       ])
     );
   }
