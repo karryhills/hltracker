@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hyperliquid Wallet Tracker</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>⚡ Hyperliquid Wallet Tracker</h1>
+    <form id="lookup-form" autocomplete="off">
+      <input
+        id="address-input"
+        type="text"
+        spellcheck="false"
+        placeholder="Enter wallet address (0x...)"
+        aria-label="Wallet address"
+      />
+      <button type="submit">Track</button>
+    </form>
+    <div id="status" class="status"></div>
+  </header>
+
+  <main id="results" class="results hidden">
+    <section class="panel summary-panel">
+      <h2>Account Summary</h2>
+      <div id="summary-grid" class="summary-grid"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Open Positions <span id="positions-count" class="count"></span></h2>
+      <div class="table-wrap">
+        <table id="positions-table">
+          <thead>
+            <tr>
+              <th>Coin</th><th>Side</th><th>Size</th><th>Entry</th><th>Mark</th>
+              <th>Value</th><th>Unrealized PnL</th><th>ROE</th><th>Lev</th><th>Liq. Px</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <p class="empty hidden" data-empty-for="positions-table">No open positions.</p>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Spot Balances <span id="spot-count" class="count"></span></h2>
+      <div class="table-wrap">
+        <table id="spot-table">
+          <thead>
+            <tr><th>Coin</th><th>Amount</th><th>USD Value</th><th>Entry Notional</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <p class="empty hidden" data-empty-for="spot-table">No spot balances.</p>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Recent Trades</h2>
+      <div class="table-wrap">
+        <table id="fills-table">
+          <thead>
+            <tr><th>Time</th><th>Coin</th><th>Side</th><th>Price</th><th>Size</th>
+              <th>Closed PnL</th><th>Fee</th><th>Direction</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <p class="empty hidden" data-empty-for="fills-table">No recent trades.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    Data from the public Hyperliquid Info API · auto-refreshes every 5s
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
