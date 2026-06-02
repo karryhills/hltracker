@@ -154,13 +154,16 @@ def _normalize_perps(
             pos_dex = coin_dex or ("" if is_native else dex_name)
             norm_dex = "" if pos_dex in ("", "native") else pos_dex
 
-            # 24h price change from the asset context's previous-day price.
+            # 24h change from the asset's previous-day price, expressed relative to
+            # the position's side: a short benefits when price falls, so its sign is
+            # flipped. This keeps green = "good for you" like ROE/PnL.
             change_24h = None
             ctx = ctx_map.get((norm_dex, coin))
             if ctx:
                 prev = _f(ctx.get("prevDayPx"))
                 if prev:
-                    change_24h = (mark_px - prev) / prev
+                    asset_change = (mark_px - prev) / prev
+                    change_24h = asset_change if szi > 0 else -asset_change
 
             positions.append(
                 {
