@@ -348,6 +348,33 @@ def _is_unified_account(abstraction_raw: Any) -> bool:
         return False
 
 
+def _latest_account_value(portfolio_raw: Any) -> float | None:
+    """Pull Hyperliquid's own latest total account value from a portfolio response.
+
+    `portfolio` returns [ [name, {accountValueHistory: [[ts, "val"], ...], ...}], ... ]
+    with total-account timeframes (day/week/month/allTime) and perps-only ones
+    (perpDay/...). The total timeframes' account value already includes spot (the
+    collateral for unified accounts), so the freshest total point == the "Portfolio
+    Value" HL shows. We take the latest point across the non-"perp" timeframes.
+    """
+    if not isinstance(portfolio_raw, list):
+        return None
+    best_ts, best_val = -1, None
+    for entry in portfolio_raw:
+        if not (isinstance(entry, list) and len(entry) == 2):
+            continue
+        name, data = entry
+        if not isinstance(name, str) or name.startswith("perp"):
+            continue  # skip perps-only timeframes
+        hist = data.get("accountValueHistory") if isinstance(data, dict) else None
+        if not hist:
+            continue
+        last = hist[-1]
+        if isinstance(last, (list, tuple)) and len(last) == 2 and last[0] > best_ts:
+            best_ts, best_val = last[0], _f(last[1])
+    return best_val
+
+
 async def get_wallet(address: str) -> dict:
     """Fetch and normalize a wallet's full Hyperliquid state.
 
@@ -356,12 +383,20 @@ async def get_wallet(address: str) -> dict:
     by enumerating DEXes from `perpDexs` and from the DEX prefixes seen in the
     wallet's fills, then querying each DEX's clearinghouseState directly.
     """
-    perp_dexs_raw, spot_raw, spot_meta_raw, fills_raw, abstraction_raw = await asyncio.gather(
+    (
+        perp_dexs_raw,
+        spot_raw,
+        spot_meta_raw,
+        fills_raw,
+        abstraction_raw,
+        portfolio_raw,
+    ) = await asyncio.gather(
         _try_post({"type": "perpDexs"}),
         _post({"type": "spotClearinghouseState", "user": address}),
         _post({"type": "spotMetaAndAssetCtxs"}),
         _post({"type": "userFills", "user": address}),
         _try_post({"type": "userAbstraction", "user": address}),
+        _try_post({"type": "portfolio", "user": address}),
     )
 
     fills = _normalize_fills(fills_raw)
@@ -380,17 +415,21 @@ async def get_wallet(address: str) -> dict:
     prices = _spot_price_map(spot_meta_raw)
     spot = _normalize_spot(spot_raw, prices)
 
-    # Portfolio value depends on account mode:
-    #  - Unified: spot holdings ARE the perps collateral, so total equity is the
-    #    spot value plus open perps unrealized PnL (perps accountValue is just a
-    #    margin figure and would double-count if added).
-    #  - Classic: perps has separate collateral, so total = perps accountValue + spot.
     summary["spotValue"] = sum(s["usdValue"] for s in spot)
     summary["unifiedAccount"] = _is_unified_account(abstraction_raw)
-    if summary["unifiedAccount"]:
-        summary["portfolioValue"] = summary["spotValue"] + summary["totalUnrealizedPnl"]
-    else:
-        summary["portfolioValue"] = summary["accountValue"] + summary["spotValue"]
+
+    # Prefer Hyperliquid's own total account value (matches the "Portfolio Value" it
+    # displays, spot included). Fall back to computing it if that's unavailable:
+    #  - Unified: spot holdings ARE the perps collateral, so total = spot + perps PnL
+    #    (adding perps accountValue would double-count).
+    #  - Classic: perps has separate collateral, so total = perps accountValue + spot.
+    portfolio_value = _latest_account_value(portfolio_raw)
+    if portfolio_value is None:
+        if summary["unifiedAccount"]:
+            portfolio_value = summary["spotValue"] + summary["totalUnrealizedPnl"]
+        else:
+            portfolio_value = summary["accountValue"] + summary["spotValue"]
+    summary["portfolioValue"] = portfolio_value
 
     return {
         "address": address,
