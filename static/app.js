@@ -139,7 +139,7 @@ function renderSummary(s) {
   const grid = document.getElementById("summary-grid");
   grid.innerHTML = "";
   const cards = [
-    { label: "Account Value", value: fmtUsd(s.accountValue) },
+    { label: "Portfolio Value", value: fmtUsd(s.accountValue) },
     { label: "Unrealized PnL", value: fmtUsd(s.totalUnrealizedPnl, { sign: true }), cls: pnlClass(s.totalUnrealizedPnl) },
     { label: "Margin Used", value: fmtUsd(s.totalMarginUsed) },
     { label: "Total Position", value: fmtUsd(s.totalNtlPos) },
