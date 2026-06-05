@@ -361,6 +361,10 @@ async def get_wallet(address: str) -> dict:
     prices = _spot_price_map(spot_meta_raw)
     spot = _normalize_spot(spot_raw, prices)
 
+    # Portfolio value = perps account equity + all spot holdings (incl. spot USDC).
+    summary["spotValue"] = sum(s["usdValue"] for s in spot)
+    summary["portfolioValue"] = summary["accountValue"] + summary["spotValue"]
+
     return {
         "address": address,
         "summary": summary,
