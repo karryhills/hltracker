@@ -9,6 +9,7 @@ fills, then normalizes everything into a single clean payload for the frontend.
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 from typing import Any
 
@@ -330,6 +331,23 @@ async def _fetch_perp_ctxs(dex_names: list[str]) -> dict[tuple[str, str], dict]:
     return out
 
 
+def _is_unified_account(abstraction_raw: Any) -> bool:
+    """Detect a unified account from a userAbstraction response.
+
+    In unified-account mode the real collateral lives in the spot clearinghouse
+    state and backs perps, so portfolio value must be computed as spot + perps PnL
+    rather than perps accountValue + spot. The response reports the mode (e.g.
+    "unifiedAccount"); we match defensively on the substring since the exact shape
+    isn't guaranteed.
+    """
+    if abstraction_raw is None:
+        return False
+    try:
+        return "unified" in json.dumps(abstraction_raw).lower()
+    except (TypeError, ValueError):
+        return False
+
+
 async def get_wallet(address: str) -> dict:
     """Fetch and normalize a wallet's full Hyperliquid state.
 
@@ -338,11 +356,12 @@ async def get_wallet(address: str) -> dict:
     by enumerating DEXes from `perpDexs` and from the DEX prefixes seen in the
     wallet's fills, then querying each DEX's clearinghouseState directly.
     """
-    perp_dexs_raw, spot_raw, spot_meta_raw, fills_raw = await asyncio.gather(
+    perp_dexs_raw, spot_raw, spot_meta_raw, fills_raw, abstraction_raw = await asyncio.gather(
         _try_post({"type": "perpDexs"}),
         _post({"type": "spotClearinghouseState", "user": address}),
         _post({"type": "spotMetaAndAssetCtxs"}),
         _post({"type": "userFills", "user": address}),
+        _try_post({"type": "userAbstraction", "user": address}),
     )
 
     fills = _normalize_fills(fills_raw)
@@ -361,9 +380,17 @@ async def get_wallet(address: str) -> dict:
     prices = _spot_price_map(spot_meta_raw)
     spot = _normalize_spot(spot_raw, prices)
 
-    # Portfolio value = perps account equity + all spot holdings (incl. spot USDC).
+    # Portfolio value depends on account mode:
+    #  - Unified: spot holdings ARE the perps collateral, so total equity is the
+    #    spot value plus open perps unrealized PnL (perps accountValue is just a
+    #    margin figure and would double-count if added).
+    #  - Classic: perps has separate collateral, so total = perps accountValue + spot.
     summary["spotValue"] = sum(s["usdValue"] for s in spot)
-    summary["portfolioValue"] = summary["accountValue"] + summary["spotValue"]
+    summary["unifiedAccount"] = _is_unified_account(abstraction_raw)
+    if summary["unifiedAccount"]:
+        summary["portfolioValue"] = summary["spotValue"] + summary["totalUnrealizedPnl"]
+    else:
+        summary["portfolioValue"] = summary["accountValue"] + summary["spotValue"]
 
     return {
         "address": address,
