@@ -326,9 +326,41 @@ window.addEventListener("hashchange", () => {
   if (addr && addr !== currentAddress) track(addr);
 });
 
+// ---- market ticker (BTC / ETH / HYPE / ZEC) -----------------------------
+
+function renderTicker(markets) {
+  const ticker = document.getElementById("ticker");
+  ticker.innerHTML = "";
+  for (const m of markets) {
+    ticker.appendChild(
+      el("div", { class: "tick" }, [
+        el("span", { class: "tick-coin" }, m.coin),
+        el("span", { class: "tick-price" }, m.price == null ? "-" : fmtNum(m.price, 2)),
+        el("span", { class: "tick-chg " + pnlClass(m.change24h) },
+          m.change24h == null ? "-" : fmtPct(m.change24h)),
+      ])
+    );
+  }
+}
+
+async function fetchMarkets() {
+  try {
+    const resp = await fetch("/api/markets");
+    if (!resp.ok) return; // keep the last values on screen
+    renderTicker(await resp.json());
+  } catch {
+    /* network hiccup — keep the last values */
+  }
+}
+
+setInterval(() => { if (!document.hidden) fetchMarkets(); }, REFRESH_MS);
+fetchMarkets();
+
 // Refresh immediately when the tab becomes visible again.
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden && currentAddress) fetchWallet(currentAddress, { silent: true });
+  if (document.hidden) return;
+  fetchMarkets();
+  if (currentAddress) fetchWallet(currentAddress, { silent: true });
 });
 
 // Save / unsave the current (or typed) address to the watchlist.

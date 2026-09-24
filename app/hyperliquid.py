@@ -438,3 +438,29 @@ async def get_wallet(address: str) -> dict:
         "spot": spot,
         "fills": fills,
     }
+
+
+TICKER_COINS = ["BTC", "ETH", "HYPE", "ZEC"]
+
+
+async def get_markets(coins: list[str]) -> list[dict]:
+    """Current mark price and 24h change for the given native perp coins.
+
+    One metaAndAssetCtxs call covers every native perp; universe[i] lines up with
+    assetCtxs[i]. The 24h change is the raw market move (markPx vs prevDayPx).
+    """
+    meta, ctxs = await _post({"type": "metaAndAssetCtxs"})
+    by_coin: dict[str, dict] = {}
+    for asset, ctx in zip((meta or {}).get("universe") or [], ctxs or []):
+        name = (asset or {}).get("name")
+        if name and isinstance(ctx, dict):
+            by_coin[name] = ctx
+
+    out = []
+    for coin in coins:
+        ctx = by_coin.get(coin)
+        price = _f(ctx.get("markPx")) if ctx else None
+        prev = _f(ctx.get("prevDayPx")) if ctx else 0.0
+        change = (price - prev) / prev if price is not None and prev else None
+        out.append({"coin": coin, "price": price, "change24h": change})
+    return out

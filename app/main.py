@@ -72,3 +72,28 @@ async def wallet(address: str):
 
     _CACHE[key] = (now, data)
     return data
+
+
+_MARKETS_CACHE: tuple[float, list] | None = None
+
+
+@app.get("/api/markets")
+async def markets():
+    global _MARKETS_CACHE
+    now = time.monotonic()
+    if _MARKETS_CACHE and now - _MARKETS_CACHE[0] < _CACHE_TTL:
+        return _MARKETS_CACHE[1]
+    try:
+        data = await hyperliquid.get_markets(hyperliquid.TICKER_COINS)
+    except httpx.HTTPStatusError as exc:
+        return JSONResponse(
+            status_code=502,
+            content={"error": f"Hyperliquid API returned {exc.response.status_code}."},
+        )
+    except httpx.HTTPError as exc:
+        return JSONResponse(
+            status_code=502,
+            content={"error": f"Could not reach Hyperliquid API: {exc}"},
+        )
+    _MARKETS_CACHE = (now, data)
+    return data
